@@ -1,0 +1,91 @@
+#!/bin/bash
+# location: /usr/local/sbin
+#chown root:root user_mngt.sh
+
+
+# Ladda ner openssl för kryptering av lösenord:
+#apt update
+#apt install openssl
+
+# Skapa loggfil
+#touch user_mngt.log
+
+# Rättigheter så att endast superanvändare och skapare kan modifiera och läsa.
+#chmod 660 user_mngt.log
+
+# Globala variabler
+account_name=""
+hash_passwd=""
+
+
+# Funktion för att skapa kontonamn
+
+user_account () {
+    local fname=$1
+    local lname=$2
+    local acc_name=${fname:0:3}${lname:0:3}
+    echo "$acc_name"
+}
+
+
+# Funktion för att lägga till användare
+## Om anv finns kommer inget felmeddelande att skrivas ut. Annars kommer den läggas till med kopierad hemkatalog
+## samt hash lösen. Info kommer skrivas ut i terminal samt till loggfil. 
+
+add_user () {
+	if ! id "$account_name" &>/dev/null; then
+		useradd -m "$account_name" --password "$hash_passwd" 
+		echo "Add $account_name" | tee -a user_mngt.log		
+		echo "Setting password for $account_name" | tee -a user_mngt.log	
+	fi
+}
+
+# Funktion för att radera användare
+## Om anv finns kommer aktuella sessioner släckas. 
+
+remove_user () {
+	if id "$account_name" &>/dev/null; then
+		pkill -u "$account_name" &>/dev/null
+		userdel -r "$account_name" &>/dev/null	
+	fi	
+}
+
+
+#Felhantering - säkerställer att antal argument är lika med 1 och att argumentet är en fil.
+
+if (( "$#" != 1 )); then
+	echo "Ange endast ett argument"
+	echo >&2
+	exit 2
+fi
+
+if [[ ! -f "$1" ]]; then
+	echo "Argumentet måste vara en fil"
+	echo >&2
+	exit 1
+fi
+
+
+#csv inläsning och användarhantering
+
+while IFS=',' read fornamn efternamn losenord operation;
+do	
+	account_name=$(user_account $fornamn $efternamn)
+	
+	if [[ $operation == "add" ]]; then
+		# hash lösen 
+		hash_passwd=$(openssl passwd -stdin <<< "$losenord")
+		
+		new_user=$(add_user) 
+		echo "$new_user"
+	fi
+	
+	if [[ $operation == "remove" ]]; then
+
+		del_user=$(remove_user)
+		echo "Remove ${fornamn:0:3}${efternamn:0:3}" | tee -a user_mngt.log
+		
+	fi
+done<"$1"
+
+
